@@ -36,7 +36,7 @@ Item {
   property var manifest: null
 
   // Plugin lifecycle hooks. The host calls open(payloadJson) after
-  // `omarchy-shell shell summon quantumfire.omalaunch ...` and close() when hidden.
+  // `omarchy-shell shell summon vxavierr.omalaunch ...` and close() when hidden.
   property string pendingInitialMenu: "root"
   property bool routePendingForMenuSources: false
 
@@ -233,9 +233,19 @@ Item {
   readonly property string selectedFilePath: root.selectedFileRow ? String(root.selectedFileRow.action || "") : ""
   readonly property bool selectedFileNavigation: !!root.selectedFileRow
     && root.selectedFileRow.itemId === "file.navigation.parent"
+  // Extension/workflow rows may carry an `image` path (e.g. clipboard
+  // screenshots). When the cursor sits on one, it drives the same side
+  // preview pane the file browser uses for image files.
+  readonly property string selectedWorkflowImagePath: root.selectedWorkflowNode
+    && MenuModel.isImagePath(root.selectedWorkflowNode.image)
+    ? String(root.selectedWorkflowNode.image) : ""
+  readonly property string selectedPreviewImagePath: root.selectedWorkflowImagePath || root.selectedFilePath
+  readonly property string selectedPreviewCaption: root.selectedWorkflowImagePath
+    ? (root.selectedWorkflowNode ? String(root.selectedWorkflowNode.label || "") : "")
+    : (root.selectedFileRow ? root.selectedFileRow.label : "")
   readonly property bool confirmationContentActive: root.workflowResultOpen || root.workflowConfirmOpen
     || root.deleteConfirmOpen || root.dependencyConfirmOpen
-  readonly property bool imagePreviewActive: !root.confirmationContentActive && MenuModel.isImagePath(root.selectedFilePath)
+  readonly property bool imagePreviewActive: !root.confirmationContentActive && MenuModel.isImagePath(root.selectedPreviewImagePath)
   readonly property var selectedWorkflowNode: root.workflowActive && !root.fileBrowserActive
     && root.workflowNode && root.workflowNode.kind === "menu" && root.cursorActive
     && root.selectedIndex >= 0 && root.selectedIndex < displayModel.count
@@ -2316,6 +2326,7 @@ Item {
         kind: "dmenu",
         icon: option.icon,
         iconFont: "",
+        image: "",
         trailingIcon: "",
         trailingText: "",
         badge: "",
@@ -2366,6 +2377,7 @@ Item {
           var workflowItem = root.normalizeItem("workflow.node." + workflowIndex, {
             icon: workflowChild.icon,
             iconFont: workflowChild.iconFont,
+            image: workflowChild.image,
             trailingIcon: workflowChild.trailingIcon,
             trailingText: workflowChild.trailingText,
             badge: workflowChild.badge,
@@ -3247,7 +3259,7 @@ Item {
   // ----------------------------------------------------------- route surface
   //
   // The menu is opened through the standard plugin lifecycle:
-  // `omarchy-shell shell summon quantumfire.omalaunch '{"menu":"system"}'`.
+  // `omarchy-shell shell summon vxavierr.omalaunch '{"menu":"system"}'`.
   // Callers may pass a real id (`system`, `setup.power`) or an alias declared
   // in JSONC (`power`, `reminder-set`). Unknown strings fall through to the
   // id-as-route behavior so misspellings still attempt to open the literal id.
@@ -4626,7 +4638,7 @@ Item {
           } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter || event.key === Qt.Key_Right) {
             if (!root.triggerFooterAction("primary") && displayModel.count > 0) root.cursorActive = true
             event.accepted = true
-          } else if (!root.documentActive && event.text && event.text.length === 1 && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127 && (event.modifiers === Qt.NoModifier || event.modifiers === Qt.ShiftModifier)) {
+          } else if (!root.documentActive && event.text && event.text.length === 1 && event.text.charCodeAt(0) >= 32 && event.text.charCodeAt(0) !== 127 && (event.modifiers === Qt.NoModifier || event.modifiers === Qt.ShiftModifier || event.modifiers === Qt.KeypadModifier || event.modifiers === (Qt.ShiftModifier | Qt.KeypadModifier))) {
             root.setFilter(root.filterText + event.text)
             event.accepted = true
           }
@@ -4897,6 +4909,7 @@ Item {
               required property string kind
               required property string icon
               required property string iconFont
+              required property string image
               required property string trailingIcon
               required property string trailingText
               required property string badge
@@ -4914,7 +4927,8 @@ Item {
               readonly property bool hasCursor: root.cursorActive && row.index === root.selectedIndex
               readonly property bool isApp: row.kind === "app"
               readonly property bool isImageFile: row.itemId.indexOf("file.item.") === 0 && MenuModel.isImagePath(row.action)
-              readonly property bool hasIcon: row.icon.length > 0 || row.isApp || row.isImageFile
+              readonly property bool isExtensionImage: !row.isApp && !row.isImageFile && row.image.length > 0 && MenuModel.isImagePath(row.image)
+              readonly property bool hasIcon: row.icon.length > 0 || row.isApp || row.isImageFile || row.isExtensionImage
 
               width: ListView.view.width
               height: root.rowHeightForDetail(row.detail)
@@ -4935,7 +4949,7 @@ Item {
 
               Text {
                 id: iconText
-                visible: row.hasIcon && !row.isApp && !row.isImageFile
+                visible: row.hasIcon && !row.isApp && !row.isImageFile && !row.isExtensionImage
                 text: root.isFontSizeSetting(row.itemId) && root.configuredMenuItemFontSize === 0
                   && row.action === root.menuItemFontClass ? "✓" : row.icon
                 color: row.hasCursor ? root.selectedText : root.foreground
@@ -4951,7 +4965,7 @@ Item {
 
               Rectangle {
                 id: imagePreview
-                visible: row.isImageFile
+                visible: row.isImageFile || row.isExtensionImage
                 width: root.menuItemIconSize
                 height: root.menuItemIconSize
                 radius: Math.min(root.cornerRadius, Style.space(5))
@@ -4963,7 +4977,7 @@ Item {
 
                 Image {
                   anchors.fill: parent
-                  source: row.isImageFile ? MenuModel.localFileUrl(row.action) : ""
+                  source: row.isImageFile ? MenuModel.localFileUrl(row.action) : MenuModel.localFileUrl(row.image)
                   fillMode: Image.PreserveAspectCrop
                   sourceSize.width: width * Screen.devicePixelRatio
                   sourceSize.height: height * Screen.devicePixelRatio
@@ -5454,7 +5468,7 @@ Item {
               anchors.rightMargin: previewPane.contentRightInset
               anchors.topMargin: previewPane.contentTopInset
               anchors.bottomMargin: previewPane.contentBottomInset + previewCaption.height + Style.space(8)
-              source: root.imagePreviewActive ? MenuModel.localFileUrl(root.selectedFilePath) : ""
+              source: root.imagePreviewActive ? MenuModel.localFileUrl(root.selectedPreviewImagePath) : ""
               fillMode: Image.PreserveAspectFit
               asynchronous: true
               cache: true
@@ -5468,7 +5482,7 @@ Item {
               anchors.leftMargin: previewPane.contentLeftInset
               anchors.rightMargin: previewPane.contentRightInset
               anchors.bottomMargin: previewPane.contentBottomInset
-              text: root.selectedFileRow ? root.selectedFileRow.label : ""
+              text: root.selectedPreviewCaption
               color: root.foreground
               opacity: 0.72
               font.family: root.fontFamily

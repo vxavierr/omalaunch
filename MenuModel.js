@@ -31,6 +31,9 @@ function normalizeItem(id, raw) {
     kind: kind,
     icon: value.icon || "",
     iconFont: value.iconFont || "",
+    // Optional absolute image path rendered as an inline thumbnail.
+    // Stays out of `icon` because icons are capped at 32 chars (glyphs).
+    image: typeof value.image === "string" ? value.image.substring(0, 512) : "",
     trailingIcon: value.trailingIcon || "",
     trailingText: typeof value.trailingText === "string" ? value.trailingText.substring(0, 64) : "",
     badge: value.badge || "",
@@ -736,6 +739,7 @@ function normalizeWorkflowNode(raw, state, depth) {
     globalSearch: raw.globalSearch !== false,
     icon: boundedWorkflowText(raw.icon, 32),
     iconFont: boundedWorkflowText(raw.iconFont, 128),
+    image: boundedWorkflowText(raw.image, 512),
     trailingIcon: boundedWorkflowText(raw.trailingIcon, 32),
     trailingText: boundedWorkflowText(raw.trailingText, 64),
     badge: boundedWorkflowText(raw.badge, 16),
@@ -787,6 +791,7 @@ function normalizeWorkflowNode(raw, state, depth) {
       || (raw.confirmDefault !== undefined && ["cancel", "action"].indexOf(raw.confirmDefault) < 0)
       || (raw.confirmTone !== undefined && ["neutral", "accent", "danger"].indexOf(raw.confirmTone) < 0)
       || (raw.confirmIcon !== undefined && typeof raw.confirmIcon !== "string")
+      || !validOptionalWorkflowText(raw.image, 512)
       || !validOptionalWorkflowText(raw.confirmTitle, 128)
       || !validOptionalWorkflowText(raw.successMessage, 512)
       || !validOptionalWorkflowText(raw.successTitle, 128)
@@ -1929,6 +1934,7 @@ function displayRow(items, itemOrder, checkedResults, entry, detail, score, sect
     kind: entry.kind,
     icon: entry.icon,
     iconFont: entry.iconFont || "",
+    image: entry.image || "",
     trailingIcon: entry.trailingIcon || "",
     trailingText: typeof entry.trailingText === "string" ? entry.trailingText.substring(0, 64) : "",
     badge: entry.badge || "",
